@@ -1,6 +1,6 @@
 import asyncio
 from database import TaskDB, SessionLocal, AccountDB
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from utils.logger_config import get_logger
 import csv
@@ -65,7 +65,6 @@ async def spider_task(task_id: int):
                     async with client.get(
                         base_url, params=params, headers=headers
                     ) as response:
-
                         if response.status == 200:
                             data = await response.json()
 
@@ -127,20 +126,52 @@ class TaskManager:
         self.output_dir = "output"
         os.makedirs(self.output_dir, exist_ok=True)
 
+    def _build_output_file_path(self, date: str) -> str:
+        return os.path.join(
+            self.output_dir,
+            f"data_{date}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
+        )
+
+    def ensure_output_file(self, task: TaskDB) -> None:
+        if not task.data_file_path:
+            task.data_file_path = self._build_output_file_path(str(task.date))  # type: ignore
+            self.session.commit()
+
+        if task.data_file_path and not os.path.exists(task.data_file_path):
+            with open(str(task.data_file_path), "w", newline=""):
+                pass
+
+    def cleanup_old_output_files(self, retention_days: int = 30) -> int:
+        cutoff = datetime.now() - timedelta(days=retention_days)
+        removed_count = 0
+
+        old_tasks = (
+            self.session.query(TaskDB)
+            .filter(TaskDB.created_at < cutoff, TaskDB.data_file_path.isnot(None))
+            .all()
+        )
+
+        for task in old_tasks:
+            file_path = task.data_file_path
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+                removed_count += 1
+
+            task.data_file_path = None  # type: ignore
+
+        if old_tasks:
+            self.session.commit()
+
+        return removed_count
+
     async def create_task(self, date: str):
         task = TaskDB(
             date=date,
             stop_flag=True,
             done=False,
             created_at=datetime.now(),
-            data_file_path=os.path.join(
-                self.output_dir,
-                f"data_{date}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
-            ),
+            data_file_path=None,
         )
-        # create the task result null file
-        with open(str(task.data_file_path), "w") as f:
-            f.write("")
 
         self.session.add(task)
         self.session.commit()
@@ -152,6 +183,7 @@ class TaskManager:
     async def start_task(self, task_id: int):
         task = self.session.query(TaskDB).get(task_id)
         if task:
+            self.ensure_output_file(task)
             task.stop_flag = False
             self.session.commit()
             # use the asyncio.ensure_future to run the task in the background

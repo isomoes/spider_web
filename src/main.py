@@ -1,4 +1,6 @@
 import os
+import hmac
+from hashlib import sha256
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse, FileResponse
@@ -9,14 +11,50 @@ from account import AccountDB, AccountManager
 from database import TaskDB
 from task_manager import TaskManager
 from scheduler import start_scheduler
+from utils.logger_config import get_logger
 
 app = FastAPI()
 auth = Auth()  # Create an instance of Auth
 account_manager = AccountManager()  # Add account manager instance
 task_manager = TaskManager()
+logger = get_logger(__name__)
+
+ACCESS_COOKIE_NAME = "spider_access"
+ACCESS_COOKIE_MAX_AGE = 60 * 60 * 12
 
 # Configure templates
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+def get_access_key() -> str:
+    access_key = os.environ.get("SPIDER_ACCESS_KEY", "")
+    if not access_key:
+        raise RuntimeError("SPIDER_ACCESS_KEY must be set before starting the server")
+    return access_key
+
+
+def build_access_cookie(access_key: str) -> str:
+    return hmac.new(access_key.encode(), b"spider-web-access", sha256).hexdigest()
+
+
+def has_valid_access(request: Request) -> bool:
+    cookie_value = request.cookies.get(ACCESS_COOKIE_NAME)
+    if not cookie_value:
+        return False
+
+    expected_value = build_access_cookie(get_access_key())
+    return hmac.compare_digest(cookie_value, expected_value)
+
+
+@app.middleware("http")
+async def require_access_key(request: Request, call_next):
+    if request.url.path in {"/access"}:
+        return await call_next(request)
+
+    if has_valid_access(request):
+        return await call_next(request)
+
+    return RedirectResponse(url="/access", status_code=303)
 
 
 @app.get("/")
@@ -24,25 +62,54 @@ def read_root():
     return RedirectResponse(url="/task")
 
 
+@app.get("/access")
+def get_access(request: Request):
+    return templates.TemplateResponse("access.html", {"request": request})
+
+
+@app.post("/access")
+async def post_access(request: Request):
+    form_data = await request.form()
+    access_key = str(form_data.get("access_key", ""))
+
+    if not hmac.compare_digest(access_key, get_access_key()):
+        return templates.TemplateResponse(
+            "access.html",
+            {"request": request, "error": "Invalid access key"},
+            status_code=401,
+        )
+
+    response = RedirectResponse(url="/task", status_code=303)
+    response.set_cookie(
+        key=ACCESS_COOKIE_NAME,
+        value=build_access_cookie(access_key),
+        max_age=ACCESS_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=True,
+    )
+    return response
+
+
 @app.get("/task")
 async def get_task(request: Request):
     # Get page parameter from query string, default to 1
     page = int(request.query_params.get("page", 1))
     items_per_page = 10
-    
+
     # Get all tasks and calculate pagination
     all_tasks = task_manager.get_tasks()
     total_tasks = len(all_tasks)
     total_pages = (total_tasks + items_per_page - 1) // items_per_page
-    
+
     # Ensure page is within valid range
     page = max(1, min(page, total_pages)) if total_pages > 0 else 1
-    
+
     # Get tasks for current page
     start_idx = (page - 1) * items_per_page
     end_idx = start_idx + items_per_page
     page_tasks = all_tasks[start_idx:end_idx]
-    
+
     spider_sleep_time = task_manager.get_spider_sleep_time()
     return templates.TemplateResponse(
         "task.html",
@@ -234,6 +301,9 @@ async def update_sleep_time(request: Request):
 @app.on_event("startup")
 async def startup_event():
     """Start the scheduler when the application starts"""
+    get_access_key()
+    logger.info("Shared access key protection enabled")
+    task_manager.cleanup_old_output_files()
     start_scheduler()
 
 

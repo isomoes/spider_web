@@ -15,13 +15,13 @@ There we use the django framework to build the web for all-stack. Here is the de
 
 ```bash
 uv sync
-PYTHONPATH=src uv run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+SPIDER_ACCESS_KEY=change-this-to-a-long-random-value PYTHONPATH=src uv run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 For debug logging, set `LOG_LEVEL=DEBUG`:
 
 ```bash
-LOG_LEVEL=DEBUG PYTHONPATH=src uv run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+LOG_LEVEL=DEBUG SPIDER_ACCESS_KEY=change-this-to-a-long-random-value PYTHONPATH=src uv run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Deployment
@@ -29,8 +29,10 @@ LOG_LEVEL=DEBUG PYTHONPATH=src uv run python -m uvicorn main:app --reload --host
 here we use the docker python image to deploy, there is the start cmd:
 
 ```bash
-pip install -r requirements.txt && PYTHONPATH=src python -m uvicorn main:app --host 0.0.0.0 --port 8000
+pip install -r requirements.txt && SPIDER_ACCESS_KEY=change-this-to-a-long-random-value PYTHONPATH=src python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+Set `SPIDER_ACCESS_KEY` to a long random secret before exposing the server to the public network. All pages are protected until the user enters that key on `/access`.
 
 ## Apply Migrations
 

@@ -10,6 +10,8 @@ task_manager = TaskManager()
 
 async def create_daily_task():
     """Create and start task for previous day at 04:00 Hong Kong time"""
+    task_manager.cleanup_old_output_files()
+
     # Get yesterday's date in Hong Kong time
     yesterday = (datetime.now(hong_kong_tz) - timedelta(days=1)).strftime("%Y-%m-%d")
 
