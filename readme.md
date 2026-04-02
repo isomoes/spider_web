@@ -14,8 +14,14 @@ There we use the django framework to build the web for all-stack. Here is the de
 ## Installation And Running
 
 ```bash
-pip install -r ../requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uv sync
+PYTHONPATH=src uv run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+For debug logging, set `LOG_LEVEL=DEBUG`:
+
+```bash
+LOG_LEVEL=DEBUG PYTHONPATH=src uv run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Deployment
@@ -23,7 +29,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 here we use the docker python image to deploy, there is the start cmd:
 
 ```bash
-pip install -r requirements.txt && cd src && uvicorn main:app --host 0.0.0.0 --port 8000 
+pip install -r requirements.txt && PYTHONPATH=src python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ## Apply Migrations

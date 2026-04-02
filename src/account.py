@@ -184,6 +184,7 @@ class AccountManager:
                     ) as login_response:
                         if login_response.status == 200:
                             login_json = await login_response.json()
+                            logger.debug(f"login_json: {login_json}")
                             token = login_json["result"]["token"]
                             account.token = token  # type: ignore
                             account.is_online = True  # type: ignore

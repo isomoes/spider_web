@@ -1,4 +1,5 @@
 import logging
+import os
 from logging import Logger
 
 # Color codes
@@ -30,11 +31,14 @@ def get_logger(name: str) -> Logger:
     logger = logging.getLogger(name)
 
     if not logger.handlers:
-        logger.setLevel(logging.INFO)
+        level = getattr(
+            logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO
+        )
+        logger.setLevel(level)
 
         # Create console handler with color formatting
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
+        console_handler.setLevel(level)
 
         formatter = ColorFormatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
