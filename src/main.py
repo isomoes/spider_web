@@ -79,6 +79,9 @@ async def post_access(request: Request):
             status_code=401,
         )
 
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    is_https = (forwarded_proto or request.url.scheme) == "https"
+
     response = RedirectResponse(url="/task", status_code=303)
     response.set_cookie(
         key=ACCESS_COOKIE_NAME,
@@ -86,7 +89,7 @@ async def post_access(request: Request):
         max_age=ACCESS_COOKIE_MAX_AGE,
         httponly=True,
         samesite="lax",
-        secure=True,
+        secure=is_https,
     )
     return response
 
